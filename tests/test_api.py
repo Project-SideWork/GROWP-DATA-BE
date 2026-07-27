@@ -2,6 +2,7 @@ import httpx
 import respx
 from fastapi.testclient import TestClient
 
+from app.core.config import get_settings
 from app.main import app
 
 
@@ -22,3 +23,12 @@ def test_analysis_endpoint_delivers_result() -> None:
     assert response.json()["result"]["numeric_columns"]["amount"]["mean"] == 150
     assert delivery.called
 
+
+def test_health_reports_kafka_disabled_by_default() -> None:
+    get_settings.cache_clear()
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "kafka": "disabled"}
