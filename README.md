@@ -16,6 +16,7 @@
 
 | 패키지 | 목적 |
 |---|---|
+| `aiokafka` | FastAPI의 비동기 실행 모델과 연결되는 Kafka producer/consumer |
 | `fastapi` | HTTP API, 입력 검증, OpenAPI 문서 생성 |
 | `uvicorn[standard]` | FastAPI를 실행하는 ASGI 서버와 성능/개발 부가 기능 |
 | `pydantic-settings` | `.env` 및 환경변수 기반 설정 관리 |
