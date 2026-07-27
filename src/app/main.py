@@ -5,6 +5,7 @@ import httpx
 from fastapi import FastAPI
 
 from app.api.router import api_router
+from app.clients.kafka import KafkaProducerManager
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 
@@ -17,8 +18,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         base_url=str(settings.backend_base_url),
         timeout=settings.request_timeout_seconds,
     )
-    yield
-    await app.state.http_client.aclose()
+    app.state.kafka_producer = None
+
+    if settings.kafka_enabled:
+        kafka_producer = KafkaProducerManager(settings)
+        await kafka_producer.start()
+        app.state.kafka_producer = kafka_producer
+
+    try:
+        yield
+    finally:
+        if app.state.kafka_producer is not None:
+            await app.state.kafka_producer.stop()
+        await app.state.http_client.aclose()
 
 
 settings = get_settings()
