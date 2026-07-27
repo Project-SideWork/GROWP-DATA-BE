@@ -75,6 +75,14 @@ make run
 - API 문서: <http://localhost:8000/docs>
 - 상태 확인: <http://localhost:8000/api/v1/health>
 
+서버를 시작하기 전에 Kafka 브로커가 로컬 `9092` 포트에서 실행 중이어야 합니다.
+`KAFKA_ENABLED=true`이면 서버 시작 시 producer가 브로커에 연결되며 health
+응답의 `kafka` 값이 `connected`로 표시됩니다.
+
+```json
+{"status": "ok", "kafka": "connected"}
+```
+
 호출 예시:
 
 ```bash
