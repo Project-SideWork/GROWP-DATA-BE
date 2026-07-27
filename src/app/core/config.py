@@ -19,9 +19,11 @@ class Settings(BaseSettings):
     backend_api_key: str = ""
     request_timeout_seconds: float = Field(default=10, gt=0)
     delivery_max_attempts: int = Field(default=3, ge=1, le=10)
+    kafka_enabled: bool = False
+    kafka_bootstrap_servers: str = "localhost:9092"
+    kafka_client_id: str = "growp-analysis-pipeline"
 
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-
