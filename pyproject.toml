@@ -49,3 +49,7 @@ select = ["E", "F", "I", "B", "UP"]
 python_version = "3.11"
 strict = true
 packages = ["app"]
+
+[[tool.mypy.overrides]]
+module = ["aiokafka", "aiokafka.*"]
+ignore_missing_imports = true
