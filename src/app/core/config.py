@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     kafka_enabled: bool = False
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_client_id: str = "growp-analysis-pipeline"
+    kafka_consumer_group_id: str = "growp-analysis-consumer"
 
 
 @lru_cache
