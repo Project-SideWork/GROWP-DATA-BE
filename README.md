@@ -104,4 +104,19 @@ make check
 ARQ 같은 작업 큐로 분리하는 편이 안전합니다. 이 스켈레톤은 짧은 분석을 위한
 동기식 API이며, 긴 작업으로 확장할 때도 `AnalysisPipeline`을 worker에서 그대로
 재사용할 수 있도록 분리했습니다.
+
+## 채용 종료 이벤트 consumer
+
+Spring Kafka producer가 발행하는 `project.recruit.ends`와
+`study.recruit.ends` 토픽은 다음 worker로 소비할 수 있습니다.
+
+```bash
+PYTHONPATH=src python3 -m app.clients.kafka_consumer
+```
+
+consumer는 JSON 객체 payload를 전달받아 토픽별 handler를 호출하고, handler가
+정상 종료된 뒤 offset을 커밋합니다. 실제 후속 처리는
+`src/app/clients/kafka_consumer.py`의 `handle_project_event`와
+`handle_study_event`에 구현하면 됩니다. `KAFKA_CONSUMER_GROUP_ID`로 consumer
+group을 분리할 수 있습니다.
 # GROWP-DATA-BE
