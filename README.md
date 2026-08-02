@@ -114,9 +114,17 @@ Spring Kafka producer가 발행하는 `project.recruit.ends`와
 PYTHONPATH=src python3 -m app.clients.kafka_consumer
 ```
 
-consumer는 JSON 객체 payload를 전달받아 토픽별 handler를 호출하고, handler가
-정상 종료된 뒤 offset을 커밋합니다. 실제 후속 처리는
-`src/app/clients/kafka_consumer.py`의 `handle_project_event`와
-`handle_study_event`에 구현하면 됩니다. `KAFKA_CONSUMER_GROUP_ID`로 consumer
-group을 분리할 수 있습니다.
+consumer는 양의 정수 ID 배열을 받아 토픽별 백엔드 API를 호출하고, 모든 요청이
+정상 종료된 뒤 offset을 커밋합니다.
+
+```json
+[10, 20, 30]
+```
+
+- `project.recruit.ends`: `BACKEND_PROJECT_ANALYSIS_PATH`를 ID별 호출
+- `study.recruit.ends`: `BACKEND_STUDY_ANALYSIS_PATH`를 ID별 호출
+
+동시에 보내는 요청 수는 `BACKEND_FETCH_CONCURRENCY`로 제한합니다. 하나라도 최종
+실패하면 offset을 커밋하지 않아 Kafka가 이벤트를 다시 전달할 수 있습니다.
+`KAFKA_CONSUMER_GROUP_ID`로 consumer group을 분리할 수 있습니다.
 # GROWP-DATA-BE
