@@ -16,9 +16,12 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     backend_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:8080")
     backend_result_path: str = "/api/v1/analysis-results"
+    backend_project_analysis_path: str = "/api/v1/projects/{id}/analysis-data"
+    backend_study_analysis_path: str = "/api/v1/studies/{id}/analysis-data"
     backend_api_key: str = ""
     request_timeout_seconds: float = Field(default=10, gt=0)
     delivery_max_attempts: int = Field(default=3, ge=1, le=10)
+    backend_fetch_concurrency: int = Field(default=5, ge=1, le=50)
     kafka_enabled: bool = False
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_client_id: str = "growp-analysis-pipeline"
