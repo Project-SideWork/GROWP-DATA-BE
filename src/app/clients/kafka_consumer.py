@@ -11,10 +11,12 @@ import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
 
+import httpx
 from aiokafka import AIOKafkaConsumer
+from pydantic import PositiveInt, TypeAdapter, ValidationError
 
+from app.clients.recruitment import RecruitmentDataClient
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 
@@ -22,27 +24,27 @@ LOGGER = logging.getLogger(__name__)
 PROJECT_TOPIC = "project.recruit.ends"
 STUDY_TOPIC = "study.recruit.ends"
 
-EventHandler = Callable[[dict[str, Any]], Awaitable[None]]
+EventHandler = Callable[[list[int]], Awaitable[None]]
+ID_LIST_ADAPTER = TypeAdapter(list[PositiveInt])
 
 
-async def handle_project_event(payload: dict[str, Any]) -> None:
-    """Handle a project recruitment-finished event.
+def build_event_handlers(client: RecruitmentDataClient) -> tuple[EventHandler, EventHandler]:
+    async def handle_project_event(entity_ids: list[int]) -> None:
+        results = await client.fetch_projects(entity_ids)
+        LOGGER.info("Fetched %d project analysis payloads", len(results))
 
-    Replace this function with the application action required for the event.
-    """
-    LOGGER.info("project recruitment ended: %s", payload)
+    async def handle_study_event(entity_ids: list[int]) -> None:
+        results = await client.fetch_studies(entity_ids)
+        LOGGER.info("Fetched %d study analysis payloads", len(results))
 
-
-async def handle_study_event(payload: dict[str, Any]) -> None:
-    """Handle a study recruitment-finished event."""
-    LOGGER.info("study recruitment ended: %s", payload)
+    return handle_project_event, handle_study_event
 
 
 class RecruitmentEventConsumer:
     def __init__(
         self,
-        project_handler: EventHandler = handle_project_event,
-        study_handler: EventHandler = handle_study_event,
+        project_handler: EventHandler,
+        study_handler: EventHandler,
     ) -> None:
         settings = get_settings()
         self._consumer = AIOKafkaConsumer(
@@ -73,12 +75,14 @@ class RecruitmentEventConsumer:
                     message.key,
                     message.value,
                 )
-                if not isinstance(message.value, dict):
-                    LOGGER.warning("Ignoring non-object payload on %s", message.topic)
+                try:
+                    entity_ids = ID_LIST_ADAPTER.validate_python(message.value)
+                except ValidationError:
+                    LOGGER.exception("Ignoring invalid ID array on %s", message.topic)
                     await self._consumer.commit()
                     continue
                 try:
-                    await self._handlers[message.topic](message.value)
+                    await self._handlers[message.topic](entity_ids)
                 except Exception:
                     LOGGER.exception(
                         "Kafka event handling failed topic=%s partition=%s offset=%s",
@@ -101,7 +105,18 @@ class RecruitmentEventConsumer:
 async def main() -> None:
     settings = get_settings()
     configure_logging(settings.log_level)
-    await RecruitmentEventConsumer().run()
+    headers = {}
+    if settings.backend_api_key:
+        headers["Authorization"] = f"Bearer {settings.backend_api_key}"
+
+    async with httpx.AsyncClient(
+        base_url=str(settings.backend_base_url),
+        timeout=settings.request_timeout_seconds,
+        headers=headers,
+    ) as http_client:
+        data_client = RecruitmentDataClient(http_client, settings)
+        project_handler, study_handler = build_event_handlers(data_client)
+        await RecruitmentEventConsumer(project_handler, study_handler).run()
 
 
 if __name__ == "__main__":
