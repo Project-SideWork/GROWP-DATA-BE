@@ -17,10 +17,13 @@ class RecruitmentDataClient:
         self._semaphore = asyncio.Semaphore(settings.backend_fetch_concurrency)
 
     async def fetch_projects(self, project_ids: Sequence[int]) -> list[Any]:
-        return await self._fetch_many(project_ids, self._settings.backend_project_analysis_path)
+        return await self._fetch_many(project_ids, self._settings.backend_project_applicants_path)
 
     async def fetch_studies(self, study_ids: Sequence[int]) -> list[Any]:
-        return await self._fetch_many(study_ids, self._settings.backend_study_analysis_path)
+        return await self._fetch_many(study_ids, self._settings.backend_study_applicants_path)
+
+    async def fetch_clubs(self, club_ids: Sequence[int]) -> list[Any]:
+        return await self._fetch_many(club_ids, self._settings.backend_club_applicants_path)
 
     async def _fetch_many(self, entity_ids: Sequence[int], path_template: str) -> list[Any]:
         return await asyncio.gather(
