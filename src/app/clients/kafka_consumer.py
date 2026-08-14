@@ -11,10 +11,12 @@ import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable
+from typing import Any
+from uuid import UUID
 
 import httpx
 from aiokafka import AIOKafkaConsumer
-from pydantic import PositiveInt, TypeAdapter, ValidationError
+from pydantic import BaseModel, Field, PositiveInt, ValidationError
 
 from app.clients.recruitment import RecruitmentDataClient
 from app.core.config import get_settings
@@ -25,7 +27,15 @@ PROJECT_TOPIC = "project.recruit.ends"
 STUDY_TOPIC = "study.recruit.ends"
 
 EventHandler = Callable[[list[int]], Awaitable[None]]
-ID_LIST_ADAPTER = TypeAdapter(list[PositiveInt])
+
+
+class RecruitmentEndedEvent(BaseModel):
+    event_id: UUID = Field(alias="eventId")
+    targets: list[PositiveInt]
+
+
+def parse_recruitment_event(payload: Any) -> RecruitmentEndedEvent:
+    return RecruitmentEndedEvent.model_validate(payload)
 
 
 def build_event_handlers(client: RecruitmentDataClient) -> tuple[EventHandler, EventHandler]:
@@ -67,22 +77,30 @@ class RecruitmentEventConsumer:
         LOGGER.info("Kafka consumer started for %s, %s", PROJECT_TOPIC, STUDY_TOPIC)
         try:
             async for message in self._consumer:
+                try:
+                    event = parse_recruitment_event(message.value)
+                except ValidationError as exc:
+                    LOGGER.warning(
+                        "Ignoring invalid recruitment event topic=%s partition=%s "
+                        "offset=%s error=%s",
+                        message.topic,
+                        message.partition,
+                        message.offset,
+                        exc,
+                    )
+                    await self._consumer.commit()
+                    continue
                 LOGGER.info(
-                    "Kafka event received topic=%s partition=%s offset=%s key=%r payload=%s",
+                    "Kafka event received topic=%s partition=%s offset=%s "
+                    "event_id=%s target_count=%s",
                     message.topic,
                     message.partition,
                     message.offset,
-                    message.key,
-                    message.value,
+                    event.event_id,
+                    len(event.targets),
                 )
                 try:
-                    entity_ids = ID_LIST_ADAPTER.validate_python(message.value)
-                except ValidationError:
-                    LOGGER.exception("Ignoring invalid ID array on %s", message.topic)
-                    await self._consumer.commit()
-                    continue
-                try:
-                    await self._handlers[message.topic](entity_ids)
+                    await self._handlers[message.topic](event.targets)
                 except Exception:
                     LOGGER.exception(
                         "Kafka event handling failed topic=%s partition=%s offset=%s",
