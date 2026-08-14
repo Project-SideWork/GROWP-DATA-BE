@@ -121,8 +121,11 @@ consumer는 양의 정수 ID 배열을 받아 토픽별 백엔드 API를 호출�
 [10, 20, 30]
 ```
 
-- `project.recruit.ends`: `BACKEND_PROJECT_ANALYSIS_PATH`를 ID별 호출
-- `study.recruit.ends`: `BACKEND_STUDY_ANALYSIS_PATH`를 ID별 호출
+- `project.recruit.ends`: ID별 `GET /api/v1/analytics/projects/{id}/applicants` 호출
+- `study.recruit.ends`: ID별 `GET /api/v1/analytics/studies/{id}/applicants` 호출
+
+클럽 데이터는 `RecruitmentDataClient.fetch_clubs()`를 통해
+`GET /api/v1/analytics/clubs/{id}/applicants`로 조회할 수 있습니다.
 
 동시에 보내는 요청 수는 `BACKEND_FETCH_CONCURRENCY`로 제한합니다. 하나라도 최종
 실패하면 offset을 커밋하지 않아 Kafka가 이벤트를 다시 전달할 수 있습니다.
