@@ -114,15 +114,18 @@ Spring Kafka producer가 발행하는 `project.recruit.ends`와
 PYTHONPATH=src python3 -m app.clients.kafka_consumer
 ```
 
-consumer는 양의 정수 ID 배열을 받아 토픽별 백엔드 API를 호출하고, 모든 요청이
-정상 종료된 뒤 offset을 커밋합니다.
+consumer는 이벤트 객체의 양의 정수 `targets` 배열을 받아 토픽별 백엔드 API를
+호출하고, 모든 요청이 정상 종료된 뒤 offset을 커밋합니다.
 
 ```json
-[10, 20, 30]
+{
+  "eventId": "a654194d-c1a0-4adc-b1f1-b840b3a4ba11",
+  "targets": [10, 20, 30]
+}
 ```
 
-- `project.recruit.ends`: `BACKEND_PROJECT_ANALYSIS_PATH`를 ID별 호출
-- `study.recruit.ends`: `BACKEND_STUDY_ANALYSIS_PATH`를 ID별 호출
+- `project.recruit.ends`: ID별 `/api/v1/analytics/projects/{id}/applicants` 호출
+- `study.recruit.ends`: ID별 `/api/v1/analytics/studies/{id}/applicants` 호출
 
 동시에 보내는 요청 수는 `BACKEND_FETCH_CONCURRENCY`로 제한합니다. 하나라도 최종
 실패하면 offset을 커밋하지 않아 Kafka가 이벤트를 다시 전달할 수 있습니다.
