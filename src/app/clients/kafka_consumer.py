@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field, PositiveInt, ValidationError
 from app.clients.recruitment import RecruitmentDataClient
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.schemas.recommendation import ApplicantDataset
+from app.services.recommendation import analyze_applicants
 
 LOGGER = logging.getLogger(__name__)
 PROJECT_TOPIC = "project.recruit.ends"
@@ -40,14 +42,70 @@ def parse_recruitment_event(payload: Any) -> RecruitmentEndedEvent:
 
 def build_event_handlers(client: RecruitmentDataClient) -> tuple[EventHandler, EventHandler]:
     async def handle_project_event(entity_ids: list[int]) -> None:
-        results = await client.fetch_projects(entity_ids)
-        LOGGER.info("Fetched %d project analysis payloads", len(results))
+        payloads = await client.fetch_projects(entity_ids)
+        _analyze_payloads(payloads, "project")
 
     async def handle_study_event(entity_ids: list[int]) -> None:
-        results = await client.fetch_studies(entity_ids)
-        LOGGER.info("Fetched %d study analysis payloads", len(results))
+        payloads = await client.fetch_studies(entity_ids)
+        _analyze_payloads(payloads, "study")
 
     return handle_project_event, handle_study_event
+
+
+def _analyze_payloads(payloads: list[Any], entity_type: str) -> None:
+    for payload in payloads:
+        # Spring ApiResponse의 result와 본문 직접 응답을 모두 지원한다.
+        raw_dataset = payload.get("result", payload) if isinstance(payload, dict) else payload
+        raw_dataset = _normalize_dataset(raw_dataset, entity_type)
+        dataset = ApplicantDataset.model_validate(raw_dataset)
+        result = analyze_applicants(dataset)
+        LOGGER.info(
+            "Applicant analysis completed type=%s target_id=%s applicant_count=%s "
+            "top_application_id=%s top_score=%s",
+            entity_type,
+            result.target_id,
+            len(result.recommendations),
+            result.recommendations[0].application_id if result.recommendations else None,
+            result.recommendations[0].final_score if result.recommendations else None,
+        )
+
+
+def _normalize_dataset(payload: Any, entity_type: str) -> Any:
+    """Convert the current legacy Spring DTO into the expanded analysis contract."""
+    if not isinstance(payload, dict) or "target" in payload:
+        return payload
+
+    id_field = f"{entity_type}Id"
+    title_field = f"{entity_type}Title"
+    if id_field not in payload or "applicants" not in payload:
+        return payload
+
+    applicants: list[dict[str, Any]] = []
+    for raw_applicant in payload["applicants"]:
+        applicant = dict(raw_applicant)
+        # 현재 DTO에는 applicationId가 없다. userId로 대체하면 다른 지원 건을
+        # 갱신할 위험이 있으므로 누락 상태를 그대로 유지한다.
+        applicant.setdefault("applicationId", None)
+        if entity_type == "study" and applicant.get("answerSummary"):
+            applicant["answers"] = [
+                {
+                    "questionId": 0,
+                    "question": "지원서 답변 요약",
+                    "evaluationCriterion": "APPLICATION_SUMMARY",
+                    "answer": applicant["answerSummary"],
+                }
+            ]
+        applicants.append(applicant)
+
+    return {
+        "target": {
+            "targetId": payload[id_field],
+            "targetType": entity_type.upper(),
+            "clubId": payload.get("clubId"),
+            "title": payload.get(title_field, ""),
+        },
+        "applicants": applicants,
+    }
 
 
 class RecruitmentEventConsumer:
