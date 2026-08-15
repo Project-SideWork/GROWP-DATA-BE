@@ -16,9 +16,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     backend_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:8080")
     backend_result_path: str = "/api/v1/analysis-results"
-    backend_project_applicants_path: str = "/api/v1/analytics/projects/{id}/applicants"
+    backend_project_applicants_path: str = "/api/v1/analytics/projects/{id}/evaluation-dataset"
     backend_club_applicants_path: str = "/api/v1/analytics/clubs/{id}/applicants"
-    backend_study_applicants_path: str = "/api/v1/analytics/studies/{id}/applicants"
+    backend_study_applicants_path: str = "/api/v1/analytics/studies/{id}/evaluation-dataset"
     backend_api_key: str = ""
     request_timeout_seconds: float = Field(default=10, gt=0)
     delivery_max_attempts: int = Field(default=3, ge=1, le=10)

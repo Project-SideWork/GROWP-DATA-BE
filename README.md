@@ -124,8 +124,8 @@ consumer는 이벤트 객체의 양의 정수 `targets` 배열을 받아 토픽�
 }
 ```
 
-- `project.recruit.ends`: ID별 `/api/v1/analytics/projects/{id}/applicants` 호출
-- `study.recruit.ends`: ID별 `/api/v1/analytics/studies/{id}/applicants` 호출
+- `project.recruit.ends`: ID별 `/api/v1/analytics/projects/{id}/evaluation-dataset` 호출
+- `study.recruit.ends`: ID별 `/api/v1/analytics/studies/{id}/evaluation-dataset` 호출
 
 동시에 보내는 요청 수는 `BACKEND_FETCH_CONCURRENCY`로 제한합니다. 하나라도 최종
 실패하면 offset을 커밋하지 않아 Kafka가 이벤트를 다시 전달할 수 있습니다.
