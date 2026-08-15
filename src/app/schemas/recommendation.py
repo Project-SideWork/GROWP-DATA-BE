@@ -18,6 +18,7 @@ def _to_camel(value: str) -> str:
 class TargetType(StrEnum):
     PROJECT = "PROJECT"
     STUDY = "STUDY"
+    CLUB = "CLUB"
 
 
 class Experience(CamelModel):

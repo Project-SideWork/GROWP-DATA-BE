@@ -35,7 +35,7 @@ async def test_project_handler_fetches_each_id() -> None:
 
     async with httpx.AsyncClient(base_url=str(settings.backend_base_url)) as http_client:
         client = RecruitmentDataClient(http_client, settings)
-        project_handler, _ = build_event_handlers(client)
+        project_handler, _, _ = build_event_handlers(client)
         await project_handler([10, 20])
 
     assert first.call_count == 1
@@ -58,8 +58,27 @@ async def test_study_handler_fetches_each_id() -> None:
 
     async with httpx.AsyncClient(base_url=str(settings.backend_base_url)) as http_client:
         client = RecruitmentDataClient(http_client, settings)
-        _, study_handler = build_event_handlers(client)
+        _, study_handler, _ = build_event_handlers(client)
         await study_handler([1, 2])
+
+    assert first.call_count == 1
+    assert second.call_count == 1
+
+
+@respx.mock
+async def test_club_handler_fetches_each_id() -> None:
+    first = respx.get(
+        "http://localhost:8080/api/v1/analytics/clubs/3/evaluation-dataset"
+    ).mock(return_value=httpx.Response(200, json=dataset(3, "CLUB")))
+    second = respx.get(
+        "http://localhost:8080/api/v1/analytics/clubs/4/evaluation-dataset"
+    ).mock(return_value=httpx.Response(200, json=dataset(4, "CLUB")))
+    settings = Settings(delivery_max_attempts=1)
+
+    async with httpx.AsyncClient(base_url=str(settings.backend_base_url)) as http_client:
+        client = RecruitmentDataClient(http_client, settings)
+        _, _, club_handler = build_event_handlers(client)
+        await club_handler([3, 4])
 
     assert first.call_count == 1
     assert second.call_count == 1

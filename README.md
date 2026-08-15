@@ -107,8 +107,8 @@ ARQ 같은 작업 큐로 분리하는 편이 안전합니다. 이 스켈레톤�
 
 ## 채용 종료 이벤트 consumer
 
-Spring Kafka producer가 발행하는 `project.recruit.ends`와
-`study.recruit.ends` 토픽은 다음 worker로 소비할 수 있습니다.
+Spring Kafka producer가 발행하는 `project.recruit.ends`,
+`study.recruit.ends`, `club.recruit.ends` 토픽은 다음 worker로 소비할 수 있습니다.
 
 ```bash
 PYTHONPATH=src python3 -m app.clients.kafka_consumer
@@ -126,6 +126,7 @@ consumer는 이벤트 객체의 양의 정수 `targets` 배열을 받아 토픽�
 
 - `project.recruit.ends`: ID별 `/api/v1/analytics/projects/{id}/evaluation-dataset` 호출
 - `study.recruit.ends`: ID별 `/api/v1/analytics/studies/{id}/evaluation-dataset` 호출
+- `club.recruit.ends`: ID별 `/api/v1/analytics/clubs/{id}/evaluation-dataset` 호출
 
 동시에 보내는 요청 수는 `BACKEND_FETCH_CONCURRENCY`로 제한합니다. 하나라도 최종
 실패하면 offset을 커밋하지 않아 Kafka가 이벤트를 다시 전달할 수 있습니다.

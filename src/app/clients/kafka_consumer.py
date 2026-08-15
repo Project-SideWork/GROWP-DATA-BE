@@ -1,8 +1,7 @@
-"""Consumers for project/study recruitment-finished events.
+"""Consumers for project/study/club recruitment-finished events.
 
 Run with ``python -m app.clients.kafka_consumer``.  Event-specific business
-logic can be supplied by replacing ``handle_project_event`` and
-``handle_study_event`` (or by composing :class:`RecruitmentEventConsumer`).
+logic can be supplied by composing :class:`RecruitmentEventConsumer`.
 """
 
 from __future__ import annotations
@@ -27,6 +26,7 @@ from app.services.recommendation import analyze_applicants
 LOGGER = logging.getLogger(__name__)
 PROJECT_TOPIC = "project.recruit.ends"
 STUDY_TOPIC = "study.recruit.ends"
+CLUB_TOPIC = "club.recruit.ends"
 
 EventHandler = Callable[[list[int]], Awaitable[None]]
 
@@ -40,7 +40,9 @@ def parse_recruitment_event(payload: Any) -> RecruitmentEndedEvent:
     return RecruitmentEndedEvent.model_validate(payload)
 
 
-def build_event_handlers(client: RecruitmentDataClient) -> tuple[EventHandler, EventHandler]:
+def build_event_handlers(
+    client: RecruitmentDataClient,
+) -> tuple[EventHandler, EventHandler, EventHandler]:
     async def handle_project_event(entity_ids: list[int]) -> None:
         payloads = await client.fetch_projects(entity_ids)
         _analyze_payloads(payloads, "project")
@@ -49,7 +51,11 @@ def build_event_handlers(client: RecruitmentDataClient) -> tuple[EventHandler, E
         payloads = await client.fetch_studies(entity_ids)
         _analyze_payloads(payloads, "study")
 
-    return handle_project_event, handle_study_event
+    async def handle_club_event(entity_ids: list[int]) -> None:
+        payloads = await client.fetch_clubs(entity_ids)
+        _analyze_payloads(payloads, "club")
+
+    return handle_project_event, handle_study_event, handle_club_event
 
 
 def _analyze_payloads(payloads: list[Any], entity_type: str) -> None:
@@ -113,11 +119,13 @@ class RecruitmentEventConsumer:
         self,
         project_handler: EventHandler,
         study_handler: EventHandler,
+        club_handler: EventHandler,
     ) -> None:
         settings = get_settings()
         self._consumer = AIOKafkaConsumer(
             PROJECT_TOPIC,
             STUDY_TOPIC,
+            CLUB_TOPIC,
             bootstrap_servers=settings.kafka_bootstrap_servers,
             group_id=settings.kafka_consumer_group_id,
             client_id=f"{settings.kafka_client_id}-consumer",
@@ -128,11 +136,17 @@ class RecruitmentEventConsumer:
         self._handlers: dict[str, EventHandler] = {
             PROJECT_TOPIC: project_handler,
             STUDY_TOPIC: study_handler,
+            CLUB_TOPIC: club_handler,
         }
 
     async def run(self) -> None:
         await self._consumer.start()
-        LOGGER.info("Kafka consumer started for %s, %s", PROJECT_TOPIC, STUDY_TOPIC)
+        LOGGER.info(
+            "Kafka consumer started for %s, %s, %s",
+            PROJECT_TOPIC,
+            STUDY_TOPIC,
+            CLUB_TOPIC,
+        )
         try:
             async for message in self._consumer:
                 try:
@@ -191,8 +205,8 @@ async def main() -> None:
         headers=headers,
     ) as http_client:
         data_client = RecruitmentDataClient(http_client, settings)
-        project_handler, study_handler = build_event_handlers(data_client)
-        await RecruitmentEventConsumer(project_handler, study_handler).run()
+        project_handler, study_handler, club_handler = build_event_handlers(data_client)
+        await RecruitmentEventConsumer(project_handler, study_handler, club_handler).run()
 
 
 if __name__ == "__main__":
