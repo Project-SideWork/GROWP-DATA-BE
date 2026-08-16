@@ -74,6 +74,19 @@ def _analyze_payloads(payloads: list[Any], entity_type: str) -> None:
             result.recommendations[0].application_id if result.recommendations else None,
             result.recommendations[0].final_score if result.recommendations else None,
         )
+        for rank, recommendation in enumerate(result.recommendations, start=1):
+            LOGGER.info(
+                "Applicant ranking type=%s target_id=%s rank=%s application_id=%s "
+                "score=%s recommendation=%s confidence=%s human_review=%s",
+                entity_type,
+                result.target_id,
+                rank,
+                recommendation.application_id,
+                recommendation.final_score,
+                recommendation.recommendation,
+                recommendation.confidence,
+                recommendation.requires_human_review,
+            )
 
 
 def _normalize_dataset(payload: Any, entity_type: str) -> Any:

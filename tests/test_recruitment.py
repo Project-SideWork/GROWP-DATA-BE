@@ -1,7 +1,10 @@
+import logging
+
 import httpx
 import respx
+from _pytest.logging import LogCaptureFixture
 
-from app.clients.kafka_consumer import _normalize_dataset, build_event_handlers
+from app.clients.kafka_consumer import _analyze_payloads, _normalize_dataset, build_event_handlers
 from app.clients.recruitment import RecruitmentDataClient
 from app.core.config import Settings
 
@@ -107,3 +110,44 @@ def test_normalizes_current_study_backend_response() -> None:
     assert normalized["target"]["targetType"] == "STUDY"
     assert normalized["applicants"][0]["applicationId"] is None
     assert normalized["applicants"][0]["answers"][0]["answer"]
+
+
+def test_logs_all_applicants_in_score_order(caplog: LogCaptureFixture) -> None:
+    with caplog.at_level(logging.INFO):
+        _analyze_payloads(
+            [
+                {
+                    "target": {
+                        "targetId": 1,
+                        "targetType": "CLUB",
+                        "title": "동아리 모집",
+                    },
+                    "applicants": [
+                        {
+                            "applicationId": 1,
+                            "userId": None,
+                            "profileId": None,
+                            "nickname": "첫째",
+                            "status": "UNREAD",
+                        },
+                        {
+                            "applicationId": 2,
+                            "userId": None,
+                            "profileId": None,
+                            "nickname": "둘째",
+                            "status": "UNREAD",
+                        },
+                    ],
+                }
+            ],
+            "club",
+        )
+
+    ranking_messages = [
+        record.message
+        for record in caplog.records
+        if record.message.startswith("Applicant ranking")
+    ]
+    assert len(ranking_messages) == 2
+    assert "rank=1 application_id=1" in ranking_messages[0]
+    assert "rank=2 application_id=2" in ranking_messages[1]
