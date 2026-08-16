@@ -48,8 +48,8 @@ class QuestionAnswer(CamelModel):
 
 class Applicant(CamelModel):
     application_id: int | None = None
-    user_id: int
-    profile_id: int
+    user_id: int | None = None
+    profile_id: int | None = None
     nickname: str
     applied_position_id: int | None = None
     applied_role: str | None = None
@@ -103,8 +103,8 @@ class ScoreDetail(CamelModel):
 
 class ApplicantRecommendation(CamelModel):
     application_id: int | None = None
-    user_id: int
-    profile_id: int
+    user_id: int | None = None
+    profile_id: int | None = None
     nickname: str
     final_score: float = Field(ge=0, le=100)
     recommendation: str

@@ -95,3 +95,34 @@ def test_missing_categories_are_excluded_instead_of_scored_zero() -> None:
     assert recommendation.confidence == 0
     assert recommendation.recommendation == "INSUFFICIENT_DATA"
     assert recommendation.requires_human_review is True
+
+
+def test_analyzes_anonymous_club_applicant_without_user_profile() -> None:
+    dataset = ApplicantDataset.model_validate(
+        {
+            "target": {"targetId": 1, "targetType": "CLUB", "title": "동아리 모집"},
+            "applicants": [
+                {
+                    "applicationId": 10,
+                    "userId": None,
+                    "profileId": None,
+                    "nickname": "비회원 지원자",
+                    "status": "UNREAD",
+                    "answers": [
+                        {
+                            "questionId": 1,
+                            "question": "지원 동기는?",
+                            "answer": "동아리 활동을 통해 협업 경험을 쌓고 함께 성장하고 싶습니다.",
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    recommendation = analyze_applicants(dataset).recommendations[0]
+
+    assert recommendation.application_id == 10
+    assert recommendation.user_id is None
+    assert recommendation.profile_id is None
+    assert recommendation.recommendation == "INSUFFICIENT_DATA"
