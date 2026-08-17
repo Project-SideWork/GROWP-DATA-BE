@@ -20,15 +20,15 @@ from pydantic import BaseModel, Field, PositiveInt, ValidationError
 from app.clients.recruitment import RecruitmentDataClient
 from app.core.config import get_settings
 from app.core.logging import configure_logging
-from app.schemas.recommendation import ApplicantDataset
-from app.services.recommendation import analyze_applicants
+from app.schemas.recommendation import ApplicantDataset, RecommendationResult
+from app.services.recommendation import analyze_applicants, build_ranking_save_request
 
 LOGGER = logging.getLogger(__name__)
 PROJECT_TOPIC = "project.recruit.ends"
 STUDY_TOPIC = "study.recruit.ends"
 CLUB_TOPIC = "club.recruit.ends"
 
-EventHandler = Callable[[list[int]], Awaitable[None]]
+EventHandler = Callable[[UUID, list[int]], Awaitable[None]]
 
 
 class RecruitmentEndedEvent(BaseModel):
@@ -43,22 +43,50 @@ def parse_recruitment_event(payload: Any) -> RecruitmentEndedEvent:
 def build_event_handlers(
     client: RecruitmentDataClient,
 ) -> tuple[EventHandler, EventHandler, EventHandler]:
-    async def handle_project_event(entity_ids: list[int]) -> None:
+    async def handle_project_event(calculation_id: UUID, entity_ids: list[int]) -> None:
         payloads = await client.fetch_projects(entity_ids)
-        _analyze_payloads(payloads, "project")
+        await _analyze_and_save_payloads(client, payloads, "project", calculation_id)
 
-    async def handle_study_event(entity_ids: list[int]) -> None:
+    async def handle_study_event(calculation_id: UUID, entity_ids: list[int]) -> None:
         payloads = await client.fetch_studies(entity_ids)
-        _analyze_payloads(payloads, "study")
+        await _analyze_and_save_payloads(client, payloads, "study", calculation_id)
 
-    async def handle_club_event(entity_ids: list[int]) -> None:
+    async def handle_club_event(calculation_id: UUID, entity_ids: list[int]) -> None:
         payloads = await client.fetch_clubs(entity_ids)
-        _analyze_payloads(payloads, "club")
+        await _analyze_and_save_payloads(client, payloads, "club", calculation_id)
 
     return handle_project_event, handle_study_event, handle_club_event
 
 
-def _analyze_payloads(payloads: list[Any], entity_type: str) -> None:
+async def _analyze_and_save_payloads(
+    client: RecruitmentDataClient,
+    payloads: list[Any],
+    entity_type: str,
+    calculation_id: UUID,
+) -> None:
+    results = _analyze_payloads(payloads, entity_type)
+    for result in results:
+        request = build_ranking_save_request(result, str(calculation_id))
+        if request is None:
+            LOGGER.info(
+                "Skipping empty ranking result type=%s target_id=%s calculation_id=%s",
+                entity_type,
+                result.target_id,
+                calculation_id,
+            )
+            continue
+        await client.save_ranking_results(request)
+        LOGGER.info(
+            "Ranking result delivered type=%s target_id=%s calculation_id=%s count=%s",
+            entity_type,
+            result.target_id,
+            calculation_id,
+            len(request.rankings),
+        )
+
+
+def _analyze_payloads(payloads: list[Any], entity_type: str) -> list[RecommendationResult]:
+    results: list[RecommendationResult] = []
     for payload in payloads:
         # Spring ApiResponse의 result와 본문 직접 응답을 모두 지원한다.
         raw_dataset = payload.get("result", payload) if isinstance(payload, dict) else payload
@@ -87,6 +115,8 @@ def _analyze_payloads(payloads: list[Any], entity_type: str) -> None:
                 recommendation.confidence,
                 recommendation.requires_human_review,
             )
+        results.append(result)
+    return results
 
 
 def _normalize_dataset(payload: Any, entity_type: str) -> Any:
@@ -185,7 +215,7 @@ class RecruitmentEventConsumer:
                     len(event.targets),
                 )
                 try:
-                    await self._handlers[message.topic](event.targets)
+                    await self._handlers[message.topic](event.event_id, event.targets)
                 except Exception:
                     LOGGER.exception(
                         "Kafka event handling failed topic=%s partition=%s offset=%s",

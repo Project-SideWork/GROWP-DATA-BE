@@ -115,7 +115,9 @@ PYTHONPATH=src python3 -m app.clients.kafka_consumer
 ```
 
 consumer는 이벤트 객체의 양의 정수 `targets` 배열을 받아 토픽별 백엔드 API를
-호출하고, 모든 요청이 정상 종료된 뒤 offset을 커밋합니다.
+호출하고 지원자 순위를 분석합니다. 결과가 있으면
+`POST /api/v1/analytics/results`로 저장한 뒤 offset을 커밋합니다. 조회·분석·저장 중
+하나라도 실패하면 offset을 커밋하지 않아 이벤트를 다시 처리합니다.
 
 ```json
 {
@@ -127,6 +129,11 @@ consumer는 이벤트 객체의 양의 정수 `targets` 배열을 받아 토픽�
 - `project.recruit.ends`: ID별 `/api/v1/analytics/projects/{id}/evaluation-dataset` 호출
 - `study.recruit.ends`: ID별 `/api/v1/analytics/studies/{id}/evaluation-dataset` 호출
 - `club.recruit.ends`: ID별 `/api/v1/analytics/clubs/{id}/evaluation-dataset` 호출
+
+저장 요청의 `calculationId`에는 원본 Kafka 이벤트의 `eventId`가 사용되며,
+`modelVersion`에는 분석기의 `analysisVersion`이 전달됩니다. 지원자가 없거나 유효한
+`applicationId`가 없는 결과는 백엔드 DTO의 최소 1건 조건에 맞춰 저장 요청을
+생략합니다.
 
 동시에 보내는 요청 수는 `BACKEND_FETCH_CONCURRENCY`로 제한합니다. 하나라도 최종
 실패하면 offset을 커밋하지 않아 Kafka가 이벤트를 다시 전달할 수 있습니다.

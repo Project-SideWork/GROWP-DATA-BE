@@ -1,4 +1,5 @@
 import logging
+from uuid import UUID
 
 import httpx
 import respx
@@ -7,6 +8,8 @@ from _pytest.logging import LogCaptureFixture
 from app.clients.kafka_consumer import _analyze_payloads, _normalize_dataset, build_event_handlers
 from app.clients.recruitment import RecruitmentDataClient
 from app.core.config import Settings
+
+EVENT_ID = UUID("a654194d-c1a0-4adc-b1f1-b840b3a4ba11")
 
 
 def dataset(target_id: int, target_type: str) -> dict[str, object]:
@@ -39,7 +42,7 @@ async def test_project_handler_fetches_each_id() -> None:
     async with httpx.AsyncClient(base_url=str(settings.backend_base_url)) as http_client:
         client = RecruitmentDataClient(http_client, settings)
         project_handler, _, _ = build_event_handlers(client)
-        await project_handler([10, 20])
+        await project_handler(EVENT_ID, [10, 20])
 
     assert first.call_count == 1
     assert second.call_count == 1
@@ -62,7 +65,7 @@ async def test_study_handler_fetches_each_id() -> None:
     async with httpx.AsyncClient(base_url=str(settings.backend_base_url)) as http_client:
         client = RecruitmentDataClient(http_client, settings)
         _, study_handler, _ = build_event_handlers(client)
-        await study_handler([1, 2])
+        await study_handler(EVENT_ID, [1, 2])
 
     assert first.call_count == 1
     assert second.call_count == 1
@@ -81,10 +84,56 @@ async def test_club_handler_fetches_each_id() -> None:
     async with httpx.AsyncClient(base_url=str(settings.backend_base_url)) as http_client:
         client = RecruitmentDataClient(http_client, settings)
         _, _, club_handler = build_event_handlers(client)
-        await club_handler([3, 4])
+        await club_handler(EVENT_ID, [3, 4])
 
     assert first.call_count == 1
     assert second.call_count == 1
+
+
+@respx.mock
+async def test_handler_posts_ranked_results_to_backend() -> None:
+    respx.get("http://localhost:8080/api/v1/analytics/projects/10/evaluation-dataset").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "result": {
+                    "target": {
+                        "targetId": 10,
+                        "targetType": "PROJECT",
+                        "title": "프로젝트",
+                    },
+                    "applicants": [
+                        {
+                            "applicationId": 100,
+                            "userId": 200,
+                            "profileId": 300,
+                            "nickname": "지원자",
+                            "status": "UNREAD",
+                        }
+                    ],
+                }
+            },
+        )
+    )
+    save_route = respx.post("http://localhost:8080/api/v1/analytics/results").mock(
+        return_value=httpx.Response(200, json={"result": {"savedCount": 1}})
+    )
+    settings = Settings(delivery_max_attempts=1)
+
+    async with httpx.AsyncClient(base_url=str(settings.backend_base_url)) as http_client:
+        client = RecruitmentDataClient(http_client, settings)
+        project_handler, _, _ = build_event_handlers(client)
+        await project_handler(EVENT_ID, [10])
+
+    request = save_route.calls[0].request
+    payload = request.content.decode()
+    assert save_route.call_count == 1
+    assert '"targetType":"PROJECT"' in payload
+    assert '"targetId":10' in payload
+    assert f'"calculationId":"{EVENT_ID}"' in payload
+    assert '"applicationId":100' in payload
+    assert '"applicantUserId":200' in payload
+    assert '"rankPosition":1' in payload
 
 
 def test_normalizes_current_study_backend_response() -> None:
