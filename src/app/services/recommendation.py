@@ -7,6 +7,8 @@ from app.schemas.recommendation import (
     Applicant,
     ApplicantDataset,
     ApplicantRecommendation,
+    RankingSaveItem,
+    RankingSaveRequest,
     RecommendationResult,
     RecruitmentPosition,
     ScoreDetail,
@@ -205,4 +207,41 @@ def analyze_applicants(dataset: ApplicantDataset) -> RecommendationResult:
         target_type=dataset.target.target_type,
         recommendations=recommendations,
         analyzed_at=datetime.now(UTC),
+    )
+
+
+def build_ranking_save_request(
+    result: RecommendationResult,
+    calculation_id: str,
+) -> RankingSaveRequest | None:
+    rankings: list[RankingSaveItem] = []
+    saveable = [item for item in result.recommendations if item.application_id is not None]
+    for rank, recommendation in enumerate(saveable, start=1):
+        application_id = recommendation.application_id
+        assert application_id is not None
+        reason_parts = [f"판정: {recommendation.recommendation}"]
+        if recommendation.strengths:
+            reason_parts.append(f"강점: {', '.join(recommendation.strengths)}")
+        if recommendation.concerns:
+            reason_parts.append(f"검토사항: {', '.join(recommendation.concerns)}")
+        reason_parts.append(f"신뢰도: {recommendation.confidence:.2f}")
+        rankings.append(
+            RankingSaveItem(
+                application_id=application_id,
+                applicant_user_id=recommendation.user_id,
+                score=recommendation.final_score,
+                rank_position=rank,
+                reason_summary=" | ".join(reason_parts)[:5000],
+            )
+        )
+
+    if not rankings:
+        return None
+    return RankingSaveRequest(
+        target_type=result.target_type,
+        target_id=result.target_id,
+        model_version=result.analysis_version,
+        calculation_id=calculation_id,
+        calculated_at=result.analyzed_at,
+        rankings=rankings,
     )

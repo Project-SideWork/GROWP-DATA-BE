@@ -6,6 +6,7 @@ import httpx
 from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.core.config import Settings
+from app.schemas.recommendation import RankingSaveRequest
 
 
 class RecruitmentDataClient:
@@ -24,6 +25,24 @@ class RecruitmentDataClient:
 
     async def fetch_clubs(self, club_ids: Sequence[int]) -> list[Any]:
         return await self._fetch_many(club_ids, self._settings.backend_club_applicants_path)
+
+    async def save_ranking_results(self, request: RankingSaveRequest) -> Any:
+        async with self._semaphore:
+            retrying = AsyncRetrying(
+                retry=retry_if_exception_type(httpx.HTTPError),
+                wait=wait_exponential(multiplier=0.25, min=0.25, max=2),
+                stop=stop_after_attempt(self._settings.delivery_max_attempts),
+                reraise=True,
+            )
+            async for attempt in retrying:
+                with attempt:
+                    response = await self._http_client.post(
+                        self._settings.backend_ranking_results_path,
+                        json=request.model_dump(mode="json", by_alias=True),
+                    )
+                    response.raise_for_status()
+                    return response.json()
+        raise RuntimeError("unreachable")
 
     async def _fetch_many(self, entity_ids: Sequence[int], path_template: str) -> list[Any]:
         return await asyncio.gather(

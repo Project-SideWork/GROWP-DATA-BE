@@ -121,3 +121,20 @@ class RecommendationResult(CamelModel):
     recommendations: list[ApplicantRecommendation]
     analysis_version: str = "rule-v1"
     analyzed_at: datetime
+
+
+class RankingSaveItem(CamelModel):
+    application_id: int
+    applicant_user_id: int | None = None
+    score: float = Field(ge=0, le=100)
+    rank_position: int = Field(ge=1)
+    reason_summary: str | None = Field(default=None, max_length=5000)
+
+
+class RankingSaveRequest(CamelModel):
+    target_type: TargetType
+    target_id: int
+    model_version: str = Field(min_length=1, max_length=100)
+    calculation_id: str = Field(min_length=1, max_length=100)
+    calculated_at: datetime
+    rankings: list[RankingSaveItem] = Field(min_length=1)

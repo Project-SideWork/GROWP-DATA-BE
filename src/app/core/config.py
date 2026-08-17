@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     backend_base_url: AnyHttpUrl = AnyHttpUrl("http://localhost:8080")
     backend_result_path: str = "/api/v1/analysis-results"
+    backend_ranking_results_path: str = "/api/v1/analytics/results"
     backend_project_applicants_path: str = "/api/v1/analytics/projects/{id}/evaluation-dataset"
     backend_club_applicants_path: str = "/api/v1/analytics/clubs/{id}/evaluation-dataset"
     backend_study_applicants_path: str = "/api/v1/analytics/studies/{id}/evaluation-dataset"
