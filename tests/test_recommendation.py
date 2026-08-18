@@ -126,3 +126,70 @@ def test_analyzes_anonymous_club_applicant_without_user_profile() -> None:
     assert recommendation.user_id is None
     assert recommendation.profile_id is None
     assert recommendation.recommendation == "INSUFFICIENT_DATA"
+
+
+def test_study_answer_is_evaluated_with_study_specific_weights() -> None:
+    dataset = ApplicantDataset.model_validate(
+        {
+            "target": {"targetId": 2, "targetType": "STUDY", "title": "알고리즘"},
+            "applicants": [
+                {
+                    "applicationId": 20,
+                    "nickname": "학습자",
+                    "status": "ACCEPTED",
+                    "answers": [
+                        {
+                            "questionId": 1,
+                            "question": "학습 목표는?",
+                            "answer": (
+                                "매주 문제 풀이 과정을 공유하고 서로의 접근법을 비교하며 "
+                                "성장하고 싶습니다."
+                            ),
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    recommendation = analyze_applicants(dataset).recommendations[0]
+
+    assert recommendation.confidence == 0.55
+    assert recommendation.recommendation != "INSUFFICIENT_DATA"
+    assert recommendation.recommendation != "NOT_ELIGIBLE"
+
+
+def test_club_uses_motivation_and_answers_instead_of_project_criteria() -> None:
+    dataset = ApplicantDataset.model_validate(
+        {
+            "target": {"targetId": 3, "targetType": "CLUB", "title": "개발 동아리"},
+            "applicants": [
+                {
+                    "applicationId": 30,
+                    "nickname": "지원자",
+                    "status": "REJECTED",
+                    "motivation": (
+                        "팀원들과 꾸준히 프로젝트를 만들며 협업 역량과 개발 역량을 "
+                        "함께 키우고 싶습니다."
+                    ),
+                    "answers": [
+                        {
+                            "questionId": 1,
+                            "question": "하고 싶은 활동은?",
+                            "answer": (
+                                "사용자 문제를 탐색하고 작은 기능부터 함께 구현해 배포까지 "
+                                "경험하고 싶습니다."
+                            ),
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    recommendation = analyze_applicants(dataset).recommendations[0]
+
+    assert recommendation.confidence == 0.8
+    assert recommendation.recommendation != "INSUFFICIENT_DATA"
+    assert recommendation.recommendation != "NOT_ELIGIBLE"
+    assert set(recommendation.score_details) == {"motivationScore", "interviewScore"}

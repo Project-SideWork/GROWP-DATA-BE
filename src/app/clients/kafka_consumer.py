@@ -20,8 +20,9 @@ from pydantic import BaseModel, Field, PositiveInt, ValidationError
 from app.clients.recruitment import RecruitmentDataClient
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.crew import RecruitmentEvaluationCrew
 from app.schemas.recommendation import ApplicantDataset, RecommendationResult
-from app.services.recommendation import analyze_applicants, build_ranking_save_request
+from app.services.recommendation import build_ranking_save_request
 
 LOGGER = logging.getLogger(__name__)
 PROJECT_TOPIC = "project.recruit.ends"
@@ -86,13 +87,14 @@ async def _analyze_and_save_payloads(
 
 
 def _analyze_payloads(payloads: list[Any], entity_type: str) -> list[RecommendationResult]:
+    crew = RecruitmentEvaluationCrew()
     results: list[RecommendationResult] = []
     for payload in payloads:
         # Spring ApiResponse의 result와 본문 직접 응답을 모두 지원한다.
         raw_dataset = payload.get("result", payload) if isinstance(payload, dict) else payload
         raw_dataset = _normalize_dataset(raw_dataset, entity_type)
         dataset = ApplicantDataset.model_validate(raw_dataset)
-        result = analyze_applicants(dataset)
+        result = crew.kickoff(dataset)
         LOGGER.info(
             "Applicant analysis completed type=%s target_id=%s applicant_count=%s "
             "top_application_id=%s top_score=%s",
@@ -105,7 +107,7 @@ def _analyze_payloads(payloads: list[Any], entity_type: str) -> list[Recommendat
         for rank, recommendation in enumerate(result.recommendations, start=1):
             LOGGER.info(
                 "Applicant ranking type=%s target_id=%s rank=%s application_id=%s "
-                "score=%s recommendation=%s confidence=%s human_review=%s",
+                "score=%s recommendation=%s confidence=%s human_review=%s review_summary=%s",
                 entity_type,
                 result.target_id,
                 rank,
@@ -114,6 +116,7 @@ def _analyze_payloads(payloads: list[Any], entity_type: str) -> list[Recommendat
                 recommendation.recommendation,
                 recommendation.confidence,
                 recommendation.requires_human_review,
+                recommendation.review_summary,
             )
         results.append(result)
     return results

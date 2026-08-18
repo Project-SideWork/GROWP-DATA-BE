@@ -113,6 +113,7 @@ class ApplicantRecommendation(CamelModel):
     strengths: list[str]
     concerns: list[str]
     requires_human_review: bool
+    review_summary: str = Field(default="", max_length=2000)
 
 
 class RecommendationResult(CamelModel):

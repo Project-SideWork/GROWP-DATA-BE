@@ -134,6 +134,7 @@ async def test_handler_posts_ranked_results_to_backend() -> None:
     assert '"applicationId":100' in payload
     assert '"applicantUserId":200' in payload
     assert '"rankPosition":1' in payload
+    assert '"reasonSummary":"판정:' in payload
 
 
 def test_normalizes_current_study_backend_response() -> None:

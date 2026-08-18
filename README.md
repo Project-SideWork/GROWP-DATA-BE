@@ -119,6 +119,23 @@ consumer는 이벤트 객체의 양의 정수 `targets` 배열을 받아 토픽�
 `POST /api/v1/analytics/results`로 저장한 뒤 offset을 커밋합니다. 조회·분석·저장 중
 하나라도 실패하면 offset을 커밋하지 않아 이벤트를 다시 처리합니다.
 
+지원자 평가는 `Agent → Task → Crew` 구조로 수행됩니다.
+
+- `DataQualityAgent`: 지원자 수와 application ID 누락·중복을 검사합니다.
+- `ApplicantEvaluationAgent`: 규칙 기반 추천 엔진으로 적합도와 신뢰도를 계산합니다.
+- `EvaluationReviewAgent`: 대상 일치, 지원자 누락, 점수 정렬을 최종 검수합니다.
+- `RecruitmentEvaluationCrew`: 세 Task를 순서대로 실행하고 검수된 결과만 저장 흐름에
+  전달합니다.
+
+`EvaluationReviewAgent`는 각 지원자 결과에 `reviewSummary`를 생성합니다. 요약에는
+최종 판정, 점수, 신뢰도, 사람 검토 필요 여부, 주요 강점과 검토사항이 포함되며,
+백엔드 저장 시 기존 `reasonSummary` 값으로도 전달됩니다.
+
+평가 항목은 모집 유형별로 다릅니다. 프로젝트는 기술·역할·경험을 중심으로,
+스터디는 지원 답변·활동 조건을 중심으로, 동아리는 지원 동기·답변을 중심으로
+평가합니다. 신뢰도 역시 각 유형에 적용 가능한 가중치만 분모로 사용하며 지원 상태는
+감사 정보로만 취급하고 적합도 판정을 차단하지 않습니다.
+
 ```json
 {
   "eventId": "a654194d-c1a0-4adc-b1f1-b840b3a4ba11",
@@ -138,4 +155,23 @@ consumer는 이벤트 객체의 양의 정수 `targets` 배열을 받아 토픽�
 동시에 보내는 요청 수는 `BACKEND_FETCH_CONCURRENCY`로 제한합니다. 하나라도 최종
 실패하면 offset을 커밋하지 않아 Kafka가 이벤트를 다시 전달할 수 있습니다.
 `KAFKA_CONSUMER_GROUP_ID`로 consumer group을 분리할 수 있습니다.
+
+## Jenkins 배포
+
+`Jenkinsfile`은 테스트를 통과한 단일 Docker 이미지를 빌드한 뒤 애플리케이션 서버에
+두 컨테이너로 배포합니다.
+
+- `growp-analysis-api`: FastAPI, host의 `8000` 포트 사용
+- `growp-analysis-consumer`: Kafka consumer worker
+
+Jenkins에는 백엔드 배포와 동일한 ID의 Credentials가 필요합니다.
+
+- `nhn-ssh-key`: bastion 접속용 SSH private key
+- `kafka-host`: Kafka broker host
+- `kafka-port`: Kafka broker port
+
+API와 consumer는 `--network host`로 실행됩니다. 따라서 Python 컨테이너의
+`http://127.0.0.1:8080`은 같은 애플리케이션 서버에 배포된 Spring 백엔드를
+가리킵니다. 다른 서버에 백엔드가 있다면 `Jenkinsfile`의 `BACKEND_BASE_URL`을 해당
+내부 주소로 변경해야 합니다.
 # GROWP-DATA-BE

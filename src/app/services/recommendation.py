@@ -12,17 +12,35 @@ from app.schemas.recommendation import (
     RecommendationResult,
     RecruitmentPosition,
     ScoreDetail,
+    TargetType,
 )
 
-WEIGHTS = {
-    "requiredSkillMatch": 0.30,
-    "preferredSkillMatch": 0.10,
-    "roleMatch": 0.15,
-    "experienceMatch": 0.10,
-    "availabilityMatch": 0.10,
-    "interviewScore": 0.25,
+TARGET_WEIGHTS: dict[TargetType, dict[str, float]] = {
+    TargetType.PROJECT: {
+        "requiredSkillMatch": 0.40,
+        "preferredSkillMatch": 0.10,
+        "roleMatch": 0.25,
+        "experienceMatch": 0.15,
+        "availabilityMatch": 0.10,
+    },
+    TargetType.STUDY: {
+        "interviewScore": 0.55,
+        "availabilityMatch": 0.25,
+        "experienceMatch": 0.15,
+        "motivationScore": 0.05,
+    },
+    TargetType.CLUB: {
+        "interviewScore": 0.45,
+        "motivationScore": 0.35,
+        "availabilityMatch": 0.10,
+        "experienceMatch": 0.10,
+    },
 }
-ELIGIBLE_STATUSES = {"UNREAD", "READ"}
+CONFIDENCE_THRESHOLDS = {
+    TargetType.PROJECT: 0.55,
+    TargetType.STUDY: 0.50,
+    TargetType.CLUB: 0.50,
+}
 
 
 def _normalize(value: str) -> str:
@@ -61,9 +79,19 @@ def _recommendation(score: float) -> str:
     return "LOW_FIT"
 
 
+def _text_score(value: str) -> float:
+    """Score substantive free text without interpreting sensitive attributes."""
+    length = len(value.strip())
+    if length == 0:
+        return 0.0
+    return min(100.0, length / 80 * 100)
+
+
 def _analyze_applicant(
     dataset: ApplicantDataset, applicant: Applicant
 ) -> ApplicantRecommendation:
+    weights = TARGET_WEIGHTS[dataset.target.target_type]
+    confidence_threshold = CONFIDENCE_THRESHOLDS[dataset.target.target_type]
     position = _position(dataset, applicant)
     details: dict[str, ScoreDetail] = {}
     strengths: list[str] = []
@@ -76,11 +104,11 @@ def _analyze_applicant(
         skill_values.extend(portfolio.skills)
     actual_skills = {_normalize(value) for value in skill_values if _normalize(value)}
 
-    if position and position.required_skills:
+    if "requiredSkillMatch" in weights and position and position.required_skills:
         score, matched, missing = _ratio(position.required_skills, actual_skills)
         details["requiredSkillMatch"] = ScoreDetail(
             score=score,
-            weight=WEIGHTS["requiredSkillMatch"],
+            weight=weights["requiredSkillMatch"],
             evidence=[
                 f"일치: {', '.join(matched) or '없음'}",
                 f"누락: {', '.join(missing) or '없음'}",
@@ -91,28 +119,28 @@ def _analyze_applicant(
         if missing:
             concerns.append(f"확인되지 않은 필수 기술: {', '.join(missing)}")
 
-    if position and position.preferred_skills:
+    if "preferredSkillMatch" in weights and position and position.preferred_skills:
         score, matched, _ = _ratio(position.preferred_skills, actual_skills)
         details["preferredSkillMatch"] = ScoreDetail(
             score=score,
-            weight=WEIGHTS["preferredSkillMatch"],
+            weight=weights["preferredSkillMatch"],
             evidence=[f"일치: {', '.join(matched) or '없음'}"],
         )
 
-    if position and applicant.applied_role:
+    if "roleMatch" in weights and position and applicant.applied_role:
         score = 100.0 if _normalize(position.role) == _normalize(applicant.applied_role) else 0.0
         details["roleMatch"] = ScoreDetail(
             score=score,
-            weight=WEIGHTS["roleMatch"],
+            weight=weights["roleMatch"],
             evidence=[f"지원 역할={applicant.applied_role}, 모집 역할={position.role}"],
         )
 
-    if applicant.experiences:
+    if "experienceMatch" in weights and applicant.experiences:
         months = sum(item.duration_months or 0 for item in applicant.experiences)
         score = min(100.0, 40 + len(applicant.experiences) * 15 + min(months, 36) / 36 * 30)
         details["experienceMatch"] = ScoreDetail(
             score=score,
-            weight=WEIGHTS["experienceMatch"],
+            weight=weights["experienceMatch"],
             evidence=[f"관련 경험 {len(applicant.experiences)}건, 명시된 기간 {months}개월"],
         )
 
@@ -134,15 +162,22 @@ def _analyze_applicant(
         region_matches = _normalize(target.activity_region) == _normalize(applicant.activity_region)
         availability_checks.append(100.0 if region_matches else 0.0)
         availability_evidence.append("활동 지역 일치" if region_matches else "활동 지역 불일치")
-    if availability_checks:
+    if "availabilityMatch" in weights and availability_checks:
         details["availabilityMatch"] = ScoreDetail(
             score=sum(availability_checks) / len(availability_checks),
-            weight=WEIGHTS["availabilityMatch"],
+            weight=weights["availabilityMatch"],
             evidence=availability_evidence,
         )
 
+    if "motivationScore" in weights and applicant.motivation and applicant.motivation.strip():
+        details["motivationScore"] = ScoreDetail(
+            score=_text_score(applicant.motivation),
+            weight=weights["motivationScore"],
+            evidence=[f"지원 동기 {len(applicant.motivation.strip())}자"],
+        )
+
     evaluated_answers = [a for a in applicant.answers if a.evaluation_score is not None]
-    if evaluated_answers:
+    if "interviewScore" in weights and evaluated_answers:
         confidences = [a.evaluation_confidence or 0.5 for a in evaluated_answers]
         weighted_sum = sum(
             (a.evaluation_score or 0) * confidence
@@ -151,14 +186,14 @@ def _analyze_applicant(
         interview_score = weighted_sum / sum(confidences)
         details["interviewScore"] = ScoreDetail(
             score=interview_score,
-            weight=WEIGHTS["interviewScore"],
+            weight=weights["interviewScore"],
             evidence=[f"AI 평가가 완료된 답변 {len(evaluated_answers)}/{len(applicant.answers)}건"],
         )
-    elif applicant.answers:
+    elif "interviewScore" in weights and applicant.answers:
         answered = [answer for answer in applicant.answers if len(answer.answer.strip()) >= 30]
         details["interviewScore"] = ScoreDetail(
             score=len(answered) / len(applicant.answers) * 100,
-            weight=WEIGHTS["interviewScore"],
+            weight=weights["interviewScore"],
             evidence=[
                 "AI 평가 점수 없음",
                 f"30자 이상 답변 {len(answered)}/{len(applicant.answers)}건",
@@ -172,14 +207,9 @@ def _analyze_applicant(
         if total_weight
         else 0.0
     )
-    confidence = min(1.0, total_weight / sum(WEIGHTS.values()))
-    eligible = applicant.status.upper() in ELIGIBLE_STATUSES
-    if not eligible:
-        concerns.append(f"분석 대상이 아닌 지원 상태: {applicant.status}")
+    confidence = min(1.0, total_weight / sum(weights.values()))
 
-    if not eligible:
-        recommendation = "NOT_ELIGIBLE"
-    elif confidence < 0.7:
+    if confidence < confidence_threshold:
         recommendation = "INSUFFICIENT_DATA"
     else:
         recommendation = _recommendation(final_score)
@@ -195,7 +225,7 @@ def _analyze_applicant(
         score_details=details,
         strengths=strengths,
         concerns=concerns,
-        requires_human_review=confidence < 0.7 or not eligible or bool(concerns),
+        requires_human_review=confidence < confidence_threshold or bool(concerns),
     )
 
 
@@ -219,19 +249,23 @@ def build_ranking_save_request(
     for rank, recommendation in enumerate(saveable, start=1):
         application_id = recommendation.application_id
         assert application_id is not None
-        reason_parts = [f"판정: {recommendation.recommendation}"]
-        if recommendation.strengths:
-            reason_parts.append(f"강점: {', '.join(recommendation.strengths)}")
-        if recommendation.concerns:
-            reason_parts.append(f"검토사항: {', '.join(recommendation.concerns)}")
-        reason_parts.append(f"신뢰도: {recommendation.confidence:.2f}")
+        if recommendation.review_summary:
+            reason_summary = recommendation.review_summary
+        else:
+            reason_parts = [f"판정: {recommendation.recommendation}"]
+            if recommendation.strengths:
+                reason_parts.append(f"강점: {', '.join(recommendation.strengths)}")
+            if recommendation.concerns:
+                reason_parts.append(f"검토사항: {', '.join(recommendation.concerns)}")
+            reason_parts.append(f"신뢰도: {recommendation.confidence:.2f}")
+            reason_summary = " | ".join(reason_parts)
         rankings.append(
             RankingSaveItem(
                 application_id=application_id,
                 applicant_user_id=recommendation.user_id,
                 score=recommendation.final_score,
                 rank_position=rank,
-                reason_summary=" | ".join(reason_parts)[:5000],
+                reason_summary=reason_summary[:5000],
             )
         )
 
