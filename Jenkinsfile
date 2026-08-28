@@ -2,6 +2,7 @@ pipeline {
     agent any
 
     options {
+        skipDefaultCheckout(true)
         disableConcurrentBuilds()
         timestamps()
     }
@@ -13,7 +14,7 @@ pipeline {
         IMAGE_ARCHIVE = 'growp-analysis.tar'
         BASTION_HOST = '133.186.134.138'
         BASTION_USER = 'ubuntu'
-        APP_SERVER_ALIAS = 'growp'
+        APP_SERVER_ALIAS = 'growp-analysis'
         BASTION_TEMP_DIR = '/home/ubuntu/temp'
         APP_DIR = '/home/ubuntu/app'
         API_CONTAINER = 'growp-analysis-api'
@@ -24,6 +25,15 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+
+                script {
+                    env.IMAGE_TAG = sh(
+                        script: 'git rev-parse HEAD',
+                        returnStdout: true
+                    ).trim()
+                }
+
+                echo "IMAGE_TAG=${env.IMAGE_TAG}"
             }
         }
 
@@ -58,26 +68,10 @@ pipeline {
                     sshUserPrivateKey(
                         credentialsId: 'nhn-ssh-key',
                         keyFileVariable: 'SSH_KEY'
-                    ),
-                    string(credentialsId: 'kafka-host', variable: 'KAFKA_HOST'),
-                    string(credentialsId: 'kafka-port', variable: 'KAFKA_PORT')
+                    )
                 ]) {
                     sh '''
 set -eu
-
-cat > .env.production <<EOF
-APP_ENV=prod
-LOG_LEVEL=INFO
-BACKEND_BASE_URL=http://127.0.0.1:8080
-BACKEND_API_KEY=
-REQUEST_TIMEOUT_SECONDS=10
-DELIVERY_MAX_ATTEMPTS=3
-BACKEND_FETCH_CONCURRENCY=5
-KAFKA_ENABLED=false
-KAFKA_BOOTSTRAP_SERVERS=${KAFKA_HOST}:${KAFKA_PORT}
-KAFKA_CLIENT_ID=growp-analysis-pipeline
-KAFKA_CONSUMER_GROUP_ID=growp-analysis-consumer
-EOF
 
 chmod 600 "${SSH_KEY}" .env.production
 
@@ -105,27 +99,9 @@ docker rm "${API_CONTAINER}" "${CONSUMER_CONTAINER}" 2>/dev/null || true
 mkdir -p logs/analysis-api logs/analysis-consumer
 sudo chown -R 10001:10001 logs/analysis-api logs/analysis-consumer
 
-docker run -d \
-  --name "${API_CONTAINER}" \
-  --network host \
-  --env-file .env.production \
-  -v "${APP_DIR}/logs/analysis-api:/app/logs" \
-  --restart unless-stopped \
-  "${IMAGE_NAME}:${IMAGE_TAG}"
 
-docker run -d \
-  --name "${CONSUMER_CONTAINER}" \
-  --network host \
-  --env-file .env.production \
-  -v "${APP_DIR}/logs/analysis-consumer:/app/logs" \
-  --restart unless-stopped \
-  "${IMAGE_NAME}:${IMAGE_TAG}" \
-  python -m app.clients.kafka_consumer
+  growp
 
-sleep 10
-docker exec "${API_CONTAINER}" python -c \
-  "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=5)"
-docker inspect -f '{{.State.Running}}' "${CONSUMER_CONTAINER}" | grep -qx true
 
 rm -f "${IMAGE_ARCHIVE}" .env.production
 INNERSSH
