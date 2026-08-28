@@ -73,10 +73,10 @@ pipeline {
                     sh '''
 set -eu
 
-chmod 600 "${SSH_KEY}" .env.production
+chmod 600 "${SSH_KEY}" .production.env
 
 scp -i "${SSH_KEY}" -o StrictHostKeyChecking=no \
-  "${IMAGE_ARCHIVE}" .env.production \
+  "${IMAGE_ARCHIVE}" .production.env \
   "${BASTION_USER}@${BASTION_HOST}:${BASTION_TEMP_DIR}/"
 
 ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no \
@@ -85,7 +85,7 @@ set -eu
 cd "${BASTION_TEMP_DIR}"
 
 scp -o StrictHostKeyChecking=no \
-  "${IMAGE_ARCHIVE}" .env.production \
+  "${IMAGE_ARCHIVE}" .production.env \
   "${APP_SERVER_ALIAS}:${APP_DIR}/"
 
 ssh -o StrictHostKeyChecking=no "${APP_SERVER_ALIAS}" <<INNERSSH
@@ -103,11 +103,11 @@ sudo chown -R 10001:10001 logs/analysis-api logs/analysis-consumer
   growp
 
 
-rm -f "${IMAGE_ARCHIVE}" .env.production
+rm -f "${IMAGE_ARCHIVE}" .production.env
 INNERSSH
 
 rm -f "${BASTION_TEMP_DIR}/${IMAGE_ARCHIVE}" \
-  "${BASTION_TEMP_DIR}/.env.production"
+  "${BASTION_TEMP_DIR}/.production.env"
 ENDSSH
                     '''
                 }
@@ -118,7 +118,7 @@ ENDSSH
     post {
         always {
             sh '''
-              rm -f ${IMAGE_ARCHIVE} .env.production || true
+              rm -f ${IMAGE_ARCHIVE} .production.env || true
               docker image rm ${TEST_IMAGE} 2>/dev/null || true
             '''
         }
