@@ -14,7 +14,7 @@ pipeline {
         IMAGE_ARCHIVE = 'growp-analysis.tar'
         BASTION_HOST = '133.186.134.138'
         BASTION_USER = 'ubuntu'
-        APP_SERVER_ALIAS = 'growp-analysis'
+        APP_SERVER_ALIAS = 'analytics'
         BASTION_TEMP_DIR = '/home/ubuntu/temp'
         APP_DIR = '/home/ubuntu/app'
         API_CONTAINER = 'growp-analysis-api'
