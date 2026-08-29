@@ -16,7 +16,7 @@ pipeline {
         BASTION_USER = 'ubuntu'
         APP_SERVER_ALIAS = 'analytics'
         BASTION_TEMP_DIR = '/home/ubuntu/temp'
-        APP_DIR = '/home/ubuntu/app'
+        APP_DIR = '/opt/growp/app'
         API_CONTAINER = 'growp-analysis-api'
         CONSUMER_CONTAINER = 'growp-analysis-consumer'
     }
