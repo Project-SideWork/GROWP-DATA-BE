@@ -93,22 +93,27 @@ set -eu
 cd "${APP_DIR}"
 
 docker load -i "${IMAGE_ARCHIVE}"
-docker stop "${API_CONTAINER}" "${CONSUMER_CONTAINER}" 2>/dev/null || true
-docker rm "${API_CONTAINER}" "${CONSUMER_CONTAINER}" 2>/dev/null || true
 
-mkdir -p logs/analysis-api logs/analysis-consumer
-sudo chown -R 10001:10001 logs/analysis-api logs/analysis-consumer
+set -a
+. /opt/growp/config/.env.production
+set +a
 
 
+export IMAGE_TAG="${IMAGE_TAG}"
+
+docker stack deploy \
+  --resolve-image never \
+  -c compose.prod.yml \
   growp
 
-
-rm -f "${IMAGE_ARCHIVE}" .production.env
+rm -f ${IMAGE_ARCHIVE}
 INNERSSH
 
-rm -f "${BASTION_TEMP_DIR}/${IMAGE_ARCHIVE}" \
-  "${BASTION_TEMP_DIR}/.production.env"
+rm -f \
+  "${BASTION_TEMP_DIR}/${IMAGE_ARCHIVE}" \
+  "${BASTION_TEMP_DIR}/compose.prod.yml"
 ENDSSH
+
                     '''
                 }
             }
