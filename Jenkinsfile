@@ -73,10 +73,10 @@ pipeline {
                     sh '''
 set -eu
 
-chmod 600 "${SSH_KEY}" .production.env
+chmod 600 "${SSH_KEY}"
 
 scp -i "${SSH_KEY}" -o StrictHostKeyChecking=no \
-  "${IMAGE_ARCHIVE}" .production.env \
+  "${IMAGE_ARCHIVE}" compose.prod.yml \
   "${BASTION_USER}@${BASTION_HOST}:${BASTION_TEMP_DIR}/"
 
 ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no \
@@ -85,7 +85,7 @@ set -eu
 cd "${BASTION_TEMP_DIR}"
 
 scp -o StrictHostKeyChecking=no \
-  "${IMAGE_ARCHIVE}" .production.env \
+  "${IMAGE_ARCHIVE}" compose.prod.yml \
   "${APP_SERVER_ALIAS}:${APP_DIR}/"
 
 ssh -o StrictHostKeyChecking=no "${APP_SERVER_ALIAS}" <<INNERSSH
@@ -95,7 +95,7 @@ cd "${APP_DIR}"
 docker load -i "${IMAGE_ARCHIVE}"
 
 set -a
-. /opt/growp/config/.env.production
+. /opt/growp/config/production.env
 set +a
 
 
@@ -123,7 +123,7 @@ ENDSSH
     post {
         always {
             sh '''
-              rm -f ${IMAGE_ARCHIVE} .production.env || true
+              rm -f ${IMAGE_ARCHIVE} || true
               docker image rm ${TEST_IMAGE} 2>/dev/null || true
             '''
         }
